@@ -91,12 +91,15 @@ class TSPSolver:
 		algorithm</returns>
 	'''
 
+	# Builds a TSP tour by progressively visiting the nearest unvisited city
+	# Overall time complexity: O(N^2) | Overall space complexity: O(N)
 	def greedy(self, time_allowance=60.0):
 		results = {}
 		start_time = time.time()
 		
+		# Initialize data structures
+    	# Time: O(N) Space: O(N)
 		cities = self._scenario.getCities()
-		ncities = len(cities)
 		
 		route = [cities[0]]
 		unvisited = set(cities)
@@ -108,10 +111,14 @@ class TSPSolver:
 			route.append(next_city)
 			unvisited.remove(next_city)
 			
+		# Wrap up
+    	# Time: O(N) Space: O(N)
 		bssf = TSPSolution(route)
 		
 		end_time = time.time()
 		
+		# Populate return values
+    	# Time: O(1) Space: O(1)
 		results['cost'] = bssf.cost
 		results['time'] = end_time - start_time
 		results['count'] = 1
@@ -121,7 +128,6 @@ class TSPSolver:
 		results['pruned'] = None
 		
 		return results
-
 
 	''' <summary>
 		This is the entry point for the branch-and-bound algorithm that you will implement
@@ -133,72 +139,107 @@ class TSPSolver:
 	'''
 
 	def branchAndBound( self, time_allowance=60.0 ):
-
-		def citiesMatrix():
+		
+		# Retrieves a list of cities from the scenario and computes a matrix representing the cost to travel between each pair of cities.
+		# Time complexity: O(n^2) | Two nested loops iterating over all cities to calculate the cost between each pair 
+		# Space complexity: O(n^2) | Resulting matrix has dimensions n x n, and each element of the matrix stores the cost between two cities.
+		def generateTravelCostMatrix():
 			cities = self._scenario.getCities()
-			numCities = len(cities)
-			matrix = np.zeros((numCities, numCities))
 
-			for i in range(len(cities)):
-				for j in range(len(cities)):
-					matrix[i, j] = cities[i].costTo(cities[j])
+			# Inner list comprehension calculates the cost to travel from the current city to each other city 
+			# Outer list comprehension creates a row for each city in the matrix
+			return np.array([[city.costTo(other) for other in cities] for city in cities])
 
-			return matrix
-
-		def calcBound(matrix):
+		#  Calculates the bound of a given matrix by iteratively subtracting the smallest element from each row and column, ensuring non-infinite values are considered.
+		# Time Complexity: O(m * n) | Space Complexity: O(m * n)
+		def calculateLowerBound(matrix):
 			bound = 0;
-			matrix_cpy = copy.deepcopy(matrix)
+			matrixCopy = copy.deepcopy(matrix)
 
-			for i in range (len(matrix_cpy)):
-				smallest = np.min(matrix_cpy[i])
-				if(math.isinf(smallest)):
+			# Subtract the smallest element from each row
+			# Time Complexity: O(m * n) | Space Complexity: O(m * n) for the deep copy of the matrix
+			for i in range (len(matrixCopy)):
+				smallestElement = np.min(matrixCopy[i])
+				if(math.isinf(smallestElement)):
 					continue
-				matrix_cpy[i] -= smallest
-				bound += smallest
+				matrixCopy[i] -= smallestElement
+				bound += smallestElement
 
-			for j in range (len(matrix_cpy)):
-				smallest = np.min(matrix_cpy[:, j])
-				if (math.isinf(smallest)):
+			# Subtract the smallest element from each column
+			# Time Complexity: O(m * n) | Space Complexity: O(1)  
+			for j in range (len(matrixCopy)):
+				smallestElement = np.min(matrixCopy[:, j])
+				if (math.isinf(smallestElement)):
 					continue
-				matrix_cpy[:, j] -= smallest
-				bound += smallest
+				matrixCopy[:, j] -= smallestElement
+				bound += smallestElement
 
-			return matrix_cpy, bound
+			return matrixCopy, bound
 
-		def expand(mainNode: States, unvisited: set, ) -> list:
-			
+
+		# Expands the given node to generate successor nodes
+		# Time complexity: O(N^2) | Space complexity: O(N)
+		def expand(mainNode: States, unvisited: set) -> list:
+
+			# Copy cost matrix to avoid mutating main node's matrix
+			# Time complexity: O(N^2) to copy matrix | Space complexity: O(N^2) for matrix copy
 			matrix_copy = copy.deepcopy(mainNode.costMatrix)
 
+			# List to store expanded nodes  
+			# Space complexity: O(N)  
 			expanded_nodes = []
 
+			# Iterate over unvisited nodes
+			# Time complexity: O(N) for iteration over N nodes
 			for i in unvisited:
+				
+				# Create copy of cost matrix for new child state
+				# Time complexity: O(N^2) | Space complexity: O(N^2)
 				stateMatrix = copy.deepcopy(matrix_copy)
-				stateMatrix[mainNode.currentIndex, :] = math.inf
+				
+				# Update costs in child matrix
+				# Time: O(N)
+				stateMatrix[mainNode.currentIndex, :] = math.inf    
 				stateMatrix[:, i] = math.inf
 
-				reduced_matrix, bound = calcBound(stateMatrix)
+				# Calculate reduced cost lower bound  
+				# Time complexity: O(N^3) | Space complexity: O(N^2)  
+				reduced_matrix, bound = calculateLowerBound(stateMatrix)
 
+				# Create new child state node
+				# Time complexity: O(1) | Space complexity: O(1) 
 				stateNode = States()
-				stateNode.costMatrix = reduced_matrix
+				
+				# Set state properties
+				# Time complexity: O(N) | Space complexity: O(N)
+				stateNode.costMatrix = reduced_matrix  
 				stateNode.bound = bound + mainNode.bound + mainNode.costMatrix[mainNode.currentIndex, i]
 				stateNode.currentIndex = i
 				stateNode.statePath = mainNode.statePath + [i]
 
+				# Add to expanded nodes
+				# Time complexity: O(1)
 				expanded_nodes.append(stateNode)
 
+			# Return list of expanded nodes 
 			return expanded_nodes
 
-		def is_complete_solution(node : States) -> bool:
-			if not node.statePath:
+		# Checks if a given node represents a complete solution to the path finding problem
+		# Time Complexity: O(n) | Space Complexity: O(n)
+		def isValidPath(node):
+			# Check if state path is empty 
+    		# Time Complexity: O(1) | Space Complexity: O(1)
+			if not node.statePath: 
 				return False
 
-			if set(range(len(node.costMatrix))) != set(node.statePath):
-				return False
+			# Get set of visited states  
+			# Time Complexity: O(n) where n is length of statePath | Space Complexity: O(n)  
+			visited = set(node.statePath)
 
-			if node.statePath[0] != node.statePath[-1]:
-				return False
 
-			return True
+			# Check that 1. All states visited and 2. Path starts and ends at same state
+    		# Time Complexity: O(1) | Space Complexity: O(1)
+			return (len(visited) == len(node.costMatrix) and set(range(len(node.costMatrix))) == visited and node.statePath[0] == node.statePath[-1])
 
 		startTime = time.time()
 		solution = 0
@@ -206,38 +247,60 @@ class TSPSolver:
 		states = 0
 		pruned = 0
 
-		start = np.array(citiesMatrix())
+		# Initialize start state
+		# Time Complexity: O(N^3) for cost calculation | Space Complexity: O(N^2) for state  
+		start = np.array(generateTravelCostMatrix())
 		startNode = States()
 		startNode.currentIndex = 0
 		startNode.statePath = [startNode.currentIndex]
 
-		startNode.costMatrix, startNode.bound = calcBound((start))
+		startNode.costMatrix, startNode.bound = calculateLowerBound((start))
 
+		# Frontier queue  
+		# Space Complexity: O(N)
 		S = [startNode]
 
+		# Store best solution   
+		# Space Complexity: O(1)
 		BSSF: tuple[float, States] = (math.inf, States())
 
+		# Search loop
 		while len(S) > 0:
+			# Check time allowance
+    		# Time Complexity: O(1)
 			if time.time() - startTime > time_allowance:
 				break
 
+			# Track max queue size 
+			# Time Complexity: O(1)
 			maxQueue = max(maxQueue, len(S))
 
+			# Get node from frontier
+    		# Time Complexity: O(logN) for heappop
 			P = heapq.heappop(S)
 
-			if is_complete_solution(P) and P.bound < BSSF[0]:
+			# Check if new best solution
+			# Time Complexity: O(N)
+			if isValidPath(P) and P.bound < BSSF[0]:
 				BSSF = (P.bound, P)
 				solution += 1
 
+			# Get unvisited states
+			# Time Complexity: O(N)
 			unvisited = set(range(len(start)))
-			# Assuming P is an instance of Node
 			if P.statePath is not None:
 				unvisited.difference_update(P.statePath)
 
+			# Handle goal state case
+    		# Time Complexity: O(1)
 			if not unvisited:
 				unvisited.add(0)
 
+			# Prune if worse than best solution 
+    		# Time Complexity: O(1)
 			if P.bound < BSSF[0]:
+				# Expand node 
+        		# Time Complexity: O(N^3) | Space Complexity: O(N)
 				for node in expand(P, unvisited):
 					states += 1
 					if math.isinf(node.bound) or node.bound > BSSF[0]:
@@ -247,12 +310,15 @@ class TSPSolver:
 					heapq.heappush(S, node)
 
 			else:
+				# Increment counter for pruned nodes 
+        		# Time Complexity: O(1)
 				pruned += 1
 
+		# Finalize best route         
+		# Time Complexity: O(N) | Space Complexity: O(N)
 		endTime = time.time()
 
 		route = [self._scenario.getCities()[index] for index in BSSF[1].statePath[:-1]]
-
 
 		return {
 			'cost': BSSF[0],
@@ -264,5 +330,6 @@ class TSPSolver:
 			'pruned': pruned
 		}
 	
+	# Overall time complexity: O(N^2) | Overall space complexity: O(N)
 	def fancy( self,time_allowance=60.0 ):
 		pass
